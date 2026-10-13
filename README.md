@@ -23,6 +23,12 @@ npm install
 npm start
 ```
 
+Run tests
+
+```bash
+npm test
+```
+
 Endpoints
 - POST `/auth/register` { username, password }
 - POST `/auth/login` { username, password } -> { token }
