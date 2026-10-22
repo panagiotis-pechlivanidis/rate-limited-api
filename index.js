@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const morgan = require('morgan');
 const logger = require('./logger');
 const authRoutes = require('./routes/auth');
 const { authenticate } = require('./middleware/auth');
@@ -10,8 +9,20 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-// Logging: morgan -> winston
-app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    logger.info('HTTP request completed', {
+      event: 'http.request',
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      ip: req.ip
+    });
+  });
+  next();
+});
 
 app.use(express.json());
 
@@ -29,11 +40,17 @@ app.get('/profile', authenticate, (req, res) => {
 // 429 and general error handling
 app.use((err, req, res, next) => {
   if (!err) return next();
-  logger.error('Unhandled error', { message: err.message, stack: err.stack });
+  logger.error('Unhandled request error', {
+    event: 'http.error',
+    error: err.message,
+    stack: err.stack,
+    method: req.method,
+    path: req.path
+  });
   if (err.status === 429) return res.status(429).json({ error: 'Too many requests' });
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
 app.listen(PORT, () => {
-  logger.info(`Server listening on port ${PORT}`);
+  logger.info('Server listening', { event: 'server.started', port: PORT });
 });

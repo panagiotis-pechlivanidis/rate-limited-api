@@ -1,13 +1,11 @@
 const { createLogger, format, transports } = require('winston');
 
 const logger = createLogger({
-  level: 'info',
+  level: process.env.LOG_LEVEL || 'info',
   format: format.combine(
     format.timestamp(),
-    format.printf(({ timestamp, level, message, ...meta }) => {
-      const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : '';
-      return `${timestamp} [${level}] ${message} ${metaStr}`;
-    })
+    format.errors({ stack: true }),
+    format.json()
   ),
   transports: [new transports.Console()]
 });

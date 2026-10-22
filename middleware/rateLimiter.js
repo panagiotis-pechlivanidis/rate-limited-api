@@ -6,7 +6,10 @@ const logger = require('../logger');
 let redisClient;
 if (process.env.REDIS_URL) {
   redisClient = new IORedis(process.env.REDIS_URL);
-  redisClient.on('error', (err) => logger.error('Redis error', { err: err.message }));
+  redisClient.on('error', (err) => logger.error('Redis error', {
+    event: 'redis.error',
+    error: err.message
+  }));
 }
 
 function buildLimiter({ windowMs, max }) {
@@ -21,6 +24,13 @@ function buildLimiter({ windowMs, max }) {
     legacyHeaders: false,
     store,
     handler: (req, res) => {
+      logger.warn('Request rate limit exceeded', {
+        event: 'rate_limit.exceeded',
+        method: req.method,
+        path: req.path,
+        userId: req.user && req.user.sub,
+        ip: req.user && req.user.sub ? undefined : req.ip
+      });
       res.status(429).json({ error: 'Too many requests' });
     }
   });
