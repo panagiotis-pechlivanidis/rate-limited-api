@@ -2,6 +2,7 @@ const rateLimit = require('express-rate-limit');
 const RedisStore = require('rate-limit-redis');
 const IORedis = require('ioredis');
 const logger = require('../logger');
+const { sendJsonError } = require('./jsonError');
 
 let redisClient;
 if (process.env.REDIS_URL) {
@@ -23,6 +24,7 @@ function buildLimiter({ windowMs, max }) {
     standardHeaders: true,
     legacyHeaders: false,
     store,
+    keyGenerator: (req) => req.user && req.user.sub ? `user:${req.user.sub}` : req.ip,
     handler: (req, res) => {
       logger.warn('Request rate limit exceeded', {
         event: 'rate_limit.exceeded',
@@ -31,7 +33,7 @@ function buildLimiter({ windowMs, max }) {
         userId: req.user && req.user.sub,
         ip: req.user && req.user.sub ? undefined : req.ip
       });
-      res.status(429).json({ error: 'Too many requests' });
+      sendJsonError(res, 429, 'RATE_LIMIT_EXCEEDED', 'Too many requests');
     }
   });
 }
@@ -40,18 +42,7 @@ function buildLimiter({ windowMs, max }) {
 function perUserOrIPLimiter(options) {
   const limiter = buildLimiter(options);
 
-  return (req, res, next) => {
-    // express-rate-limit uses req.ip by default; to rate limit per-user,
-    // set req.ip to the user id when authenticated, then restore.
-    const originalIp = req.ip;
-    if (req.user && req.user.sub) {
-      req.ip = `user:${req.user.sub}`;
-    }
-    limiter(req, res, (err) => {
-      req.ip = originalIp;
-      next(err);
-    });
-  };
+  return limiter;
 }
 
 module.exports = { perUserOrIPLimiter };

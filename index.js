@@ -4,6 +4,7 @@ const logger = require('./logger');
 const authRoutes = require('./routes/auth');
 const { authenticate } = require('./middleware/auth');
 const { perUserOrIPLimiter } = require('./middleware/rateLimiter');
+const { sendJsonError } = require('./middleware/jsonError');
 
 const app = express();
 
@@ -47,8 +48,8 @@ app.use((err, req, res, next) => {
     method: req.method,
     path: req.path
   });
-  if (err.status === 429) return res.status(429).json({ error: 'Too many requests' });
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  if (err.status === 429) return sendJsonError(res, 429, 'RATE_LIMIT_EXCEEDED', 'Too many requests');
+  return sendJsonError(res, err.status || 500, 'INTERNAL_ERROR', 'Internal server error');
 });
 
 app.listen(PORT, () => {

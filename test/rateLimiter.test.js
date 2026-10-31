@@ -62,7 +62,7 @@ test('limits authenticated requests by user across IP addresses', async (t) => {
   });
   assert.deepEqual(await request(port, { ip: '203.0.113.2', user: 'user-1' }), {
     statusCode: 429,
-    body: { error: 'Too many requests' }
+    body: { error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests' } }
   });
   assert.equal((await request(port, { ip: '203.0.113.1', user: 'user-2' })).statusCode, 200);
 });
@@ -73,7 +73,7 @@ test('limits unauthenticated requests by IP', async (t) => {
   assert.equal((await request(port, { ip: '203.0.113.1' })).statusCode, 200);
   assert.deepEqual(await request(port, { ip: '203.0.113.1' }), {
     statusCode: 429,
-    body: { error: 'Too many requests' }
+    body: { error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests' } }
   });
   assert.equal((await request(port, { ip: '203.0.113.2' })).statusCode, 200);
 });

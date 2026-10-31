@@ -56,6 +56,7 @@ test('logs missing credentials as an authentication warning', (t) => {
   });
 
   assert.equal(res.statusCode, 401);
+  assert.deepEqual(res.body, { error: { code: 'AUTH_REQUIRED', message: 'Authentication required' } });
   assert.equal(nextCalled, false);
   assert.deepEqual(logs, [{
     level: 'warn',
@@ -72,16 +73,57 @@ test('logs invalid tokens without including the credential', (t) => {
   const logs = captureLogs(t);
   const token = 'not-a-valid-token';
   const res = createResponse();
+  const originalSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = 'auth-test-secret';
+  t.after(() => {
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
+  });
 
   authenticate(createRequest(`Bearer ${token}`), res, () => {
     assert.fail('invalid token must not authenticate');
   });
 
   assert.equal(res.statusCode, 401);
+  assert.deepEqual(res.body, { error: { code: 'TOKEN_INVALID', message: 'Invalid token' } });
   assert.equal(logs[0].level, 'warn');
   assert.equal(logs[0].event, 'auth.failure');
   assert.equal(logs[0].reason, 'JsonWebTokenError');
   assert.equal(JSON.stringify(logs).includes(token), false);
+});
+
+test('returns a distinct JSON error for expired tokens', (t) => {
+  const originalSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = 'auth-test-secret';
+  t.after(() => {
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
+  });
+
+  const token = jwt.sign({ sub: 'user-42' }, 'auth-test-secret', { expiresIn: -1 });
+  const res = createResponse();
+
+  authenticate(createRequest(`Bearer ${token}`), res, () => assert.fail('expired token must not authenticate'));
+
+  assert.equal(res.statusCode, 401);
+  assert.deepEqual(res.body, { error: { code: 'TOKEN_EXPIRED', message: 'Token expired' } });
+});
+
+test('rejects tokens without a subject claim', (t) => {
+  const originalSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = 'auth-test-secret';
+  t.after(() => {
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
+  });
+
+  const token = jwt.sign({ username: 'alice' }, 'auth-test-secret');
+  const res = createResponse();
+
+  authenticate(createRequest(`Bearer ${token}`), res, () => assert.fail('token without sub must not authenticate'));
+
+  assert.equal(res.statusCode, 401);
+  assert.deepEqual(res.body, { error: { code: 'TOKEN_INVALID', message: 'Invalid token' } });
 });
 
 test('logs successful authentication with the user identifier', (t) => {
@@ -118,6 +160,8 @@ test('logs successful authentication with the user identifier', (t) => {
 test('logs unexpected middleware failures as errors and forwards them', (t) => {
   const logs = captureLogs(t);
   const originalVerify = jwt.verify;
+  const originalSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = 'auth-test-secret';
   const error = new Error('verification subsystem failed');
   jwt.verify = () => {
     throw error;
@@ -125,6 +169,8 @@ test('logs unexpected middleware failures as errors and forwards them', (t) => {
 
   t.after(() => {
     jwt.verify = originalVerify;
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
   });
 
   let forwardedError;
